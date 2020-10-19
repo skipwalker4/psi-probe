@@ -15,10 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -28,6 +25,8 @@ import org.apache.catalina.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.ServletRequestUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -107,10 +106,14 @@ public class ExecuteSqlController extends AbstractContextHandlerController {
       List<Map<String, String>> results = null;
       int rowsAffected = 0;
 
+
+      boolean readOnlyStateBefore = false;
+      Connection conn = null;
       try {
-        // TODO: use Spring's jdbc template?
-        try (Connection conn = dataSource.getConnection()) {
+          conn = dataSource.getConnection();
           conn.setAutoCommit(true);
+          readOnlyStateBefore = conn.isReadOnly();
+          conn.setReadOnly(isReadOnlySQLUser());
 
           try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             boolean hasResultSet = stmt.execute();
@@ -158,7 +161,7 @@ public class ExecuteSqlController extends AbstractContextHandlerController {
               rowsAffected = results.size();
             }
           }
-        }
+
 
         // store the query results in the session attribute in order
         // to support a result set pagination feature without re-executing the query
@@ -177,10 +180,30 @@ public class ExecuteSqlController extends AbstractContextHandlerController {
             .getMessage("probe.src.dataSourceTest.sql.failure", new Object[] {e.getMessage()});
         logger.error(message, e);
         request.setAttribute("errorMessage", message);
+      } finally {
+        if (null != conn) {
+          conn.setReadOnly(readOnlyStateBefore);
+          conn.close();
+        }
       }
     }
 
     return new ModelAndView(getViewName());
+  }
+
+  protected boolean isReadOnlySQLUser() {
+    Collection<? extends GrantedAuthority> authorities =
+            SecurityContextHolder.getContext().getAuthentication().getAuthorities();
+
+    boolean result = false;
+    for (GrantedAuthority authority : authorities) {
+      if (authority.getAuthority().toUpperCase().contains("SQLREADONLY")) {
+        logger.trace("Setting connection to read only, user has role: " + authority.getAuthority());
+        result = true;
+        break;
+      }
+    }
+    return result;
   }
 
   @Override

@@ -59,6 +59,7 @@
 			<role-name>manager</role-name>
 			<role-name>manager-gui</role-name>
 			<role-name>poweruserplus</role-name>
+			<role-name>probe-sqlreadonly</role-name>
 		</auth-constraint>
 		<user-data-constraint>
 			<transport-guarantee>NONE</transport-guarantee>
@@ -90,6 +91,10 @@
 
 	<security-role>
 		<role-name>probeuser</role-name>
+	</security-role>
+
+	<security-role>
+		<role-name>probe-sqlreadonly</role-name>
 	</security-role>
 
 </web-app>
